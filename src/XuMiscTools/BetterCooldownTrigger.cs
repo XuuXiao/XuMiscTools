@@ -5,8 +5,10 @@ using Unity.Netcode;
 using UnityEngine;
 
 namespace XuMiscTools;
-public class BetterCooldownTrigger : MonoBehaviour
+public class BetterCooldownTrigger : NetworkBehaviour
 {
+    #region Enums
+
     public enum DeathAnimation
     {
         Default,
@@ -31,26 +33,39 @@ public class BetterCooldownTrigger : MonoBehaviour
         Center,
     }
 
+    #endregion
+
+    #region Fields
+
+    [Header("Death Animation Settings")]
     [Tooltip("Different ragdoll body types that spawn after death.")]
     public DeathAnimation deathAnimation = DeathAnimation.Default;
+    [Space(2)]
+    [Header("Force Settings")]
     [Tooltip("The force direction of the damage.")]
     public ForceDirection forceDirection = ForceDirection.Forward;
-    [Tooltip("Cause of death displayed in ScanNode after death.")]
-    public CauseOfDeath causeOfDeath = CauseOfDeath.Unknown;
     [Tooltip("The force magnitude of the damage.")]
     public float forceMagnitudeAfterDamage = 0f;
     [Tooltip("The force magnitude after death of player.")]
     public float forceMagnitudeAfterDeath = 0f;
+    [Tooltip("If true, the force direction will be calculated from the object's transform. If false, the force direction will be calculated from the player's transform.")]
+    public bool forceDirectionFromThisObject = true;
+    [Space(2)]
+    [Header("Cause of Death")]
+    [Tooltip("Cause of death displayed in ScanNode after death.")]
+    public CauseOfDeath causeOfDeath = CauseOfDeath.Unknown;
+    [Space(2)]
+    [Header("Trigger Settings")]
     [Tooltip("Whether to trigger for enemies.")]
     public bool triggerForEnemies = false;
     [Tooltip("Whether to use shared cooldown between different GameObjects that use this script.")]
     public bool sharedCooldown = false;
     [Tooltip("Whether to play default player damage SFX when damage is dealt.")]
     public bool playDefaultPlayerDamageSFX = false;
-    [Tooltip("If true, the force direction will be calculated from the object's transform. If false, the force direction will be calculated from the player's transform.")]
-    public bool forceDirectionFromThisObject = true;
     [Tooltip("Whether to play sound when damage is dealt to player that enemies can hear.")]
     public bool soundAttractsDogs = false;
+    [Space(2)]
+    [Header("Damage Settings")]
     [Tooltip("Timer in which the gameobject will disable itself, 0 will not disable itself after any point of time.")]
     public float damageDuration = 0f;
     [Tooltip("Damage to deal every interval for players.")]
@@ -61,10 +76,22 @@ public class BetterCooldownTrigger : MonoBehaviour
     public float damageIntervalForPlayers = 0.25f;
     [Tooltip("Cooldown to deal damage for enemies.")]
     public float damageIntervalForEnemies = 0.25f;
+    [Space(2)]
+    [Header("Audio Settings")]
     [Tooltip("Damage clip to play when damage is dealt to player/enemy.")]
     public List<AudioClip>? damageClip = null;
     [Tooltip("Damage audio sources to play when damage is dealt to player (picks the closest AudioSource to the player).")]
     public List<AudioSource>? damageAudioSources = null;
+    [Space(2)]
+    [Header("Death Prefab Settings")]
+    [Tooltip("Prefab to spawn when the player dies.")]
+    public GameObject? deathPrefabForPlayer = null;
+    [Tooltip("Prefab to spawn when the enemy dies.")]
+    public GameObject? deathPrefabForEnemy = null;
+
+    #endregion
+
+    #region Private Fields
 
     private static float lastDamageTime = -Mathf.Infinity; // Last time damage was dealt across all instances
 
@@ -73,6 +100,7 @@ public class BetterCooldownTrigger : MonoBehaviour
     private Dictionary<PlayerControllerB, AudioSource> playerClosestAudioSources = new Dictionary<PlayerControllerB, AudioSource>();
     private Dictionary<EnemyAI, AudioSource> enemyClosestAudioSources = new Dictionary<EnemyAI, AudioSource>();
 
+    #endregion
     private void OnEnable()
     {
         StartCoroutine(ManageDamageTimer());
@@ -179,6 +207,13 @@ public class BetterCooldownTrigger : MonoBehaviour
         if (!player.isPlayerDead)
         {
             player.externalForces += calculatedForceAfterDamage;
+        } else {
+            if (deathPrefabForPlayer != null && deathPrefabForPlayer.GetComponent<NetworkObject>() != null)
+            {
+                SpawnDeathPrefabServerRpc(player.transform.position, player.transform.rotation, true);
+            } else if (deathPrefabForPlayer != null) {
+                Instantiate(deathPrefabForPlayer, player.transform.position, player.transform.rotation);
+            }
         }
     }
 
@@ -186,6 +221,27 @@ public class BetterCooldownTrigger : MonoBehaviour
     {
         enemy.HitEnemy(damageToDealForEnemies, null, false, -1);
         PlayDamageSound(enemy.transform, enemyClosestAudioSources.ContainsKey(enemy) ? enemyClosestAudioSources[enemy] : null);
+
+        if (enemy.isEnemyDead) {
+            if (deathPrefabForEnemy != null && deathPrefabForEnemy.GetComponent<NetworkObject>() != null)
+            {
+                SpawnDeathPrefabServerRpc(enemy.transform.position, enemy.transform.rotation, false);
+            } else if (deathPrefabForEnemy != null) {
+                Instantiate(deathPrefabForEnemy, enemy.transform.position, enemy.transform.rotation);
+            }
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SpawnDeathPrefabServerRpc(Vector3 position, Quaternion rotation, bool forPlayer)
+    {
+        if (forPlayer) {
+            Instantiate(deathPrefabForPlayer, position, rotation);
+            deathPrefabForPlayer?.GetComponent<NetworkObject>().Spawn();
+        } else {
+            Instantiate(deathPrefabForEnemy, position, rotation);
+            deathPrefabForEnemy?.GetComponent<NetworkObject>().Spawn();
+        }
     }
 
     private Vector3 CalculateForceDirection(PlayerControllerB player, float baseForce)
