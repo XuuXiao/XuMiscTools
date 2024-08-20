@@ -1,5 +1,6 @@
 ﻿using BepInEx;
 using BepInEx.Logging;
+using XuMiscTools.Patches;
 
 /*
   Here are some basic resources on code style and naming conventions to help
@@ -25,7 +26,7 @@ public class Plugin : BaseUnityPlugin
       We assign it here
     */
     Log = Logger;
-
+    ShovelPatch.Init();
     // Log our awake here so we can see it in LogOutput.txt file
     Log.LogInfo($"Plugin {LCMPluginInfo.PLUGIN_NAME} is loaded!");
   }

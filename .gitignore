@@ -221,3 +221,6 @@ node_modules/
 
 # End of https://www.toptal.com/developers/gitignore/api/csharp
 artifacts/*/dist/**/*
+
+# Where i put my files to build because im lazy to do it the proper way.
+build

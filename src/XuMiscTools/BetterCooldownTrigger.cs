@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using GameNetcodeStuff;
 using Unity.Netcode;
 using UnityEngine;
@@ -232,7 +231,6 @@ public class BetterCooldownTrigger : MonoBehaviour
 
             WalkieTalkie.TransmitOneShotAudio(audioSource, damageClip[Random.Range(0, damageClip.Count)], audioSource.volume);
             RoundManager.PlayRandomClip(audioSource, damageClip.ToArray(), true, audioSource.volume, 0, damageClip.Count);
-            audioSource.PlayOneShot(damageClip[Random.Range(0, damageClip.Count)]);
         }
     }
 
