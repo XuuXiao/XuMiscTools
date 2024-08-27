@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using DigitalRuby.ThunderAndLightning;
 using UnityEngine;
+using static UnityEngine.ParticleSystem;
 using Object = UnityEngine.Object;
 using Vector3 = UnityEngine.Vector3;
 
@@ -22,8 +23,6 @@ public class LightningScript : MonoBehaviour {
     public float BoltRangeFromGameObject = 10f;
     [Tooltip("If using predefined list of positions, this is for random-ness of the lightning bolt strike positions from said positions.")]
     public List<GameObject>? BoltPositions;
-    [Tooltip("Range of lightning bolts being striken from predefined list of positions.")]
-    public float BoltRangeFromList = 0f;
     [Tooltip("Interval cooldown between each lightning strike.")]
     public float StrikeInterval = 5f;
     [Space(2)]
@@ -42,42 +41,78 @@ public class LightningScript : MonoBehaviour {
     public float TrunkMinimum = 0.6f;
     public float TrunkMaximum = 1.2f;
 
+    [Header("Pre-lightning strike settings")]
+    [Tooltip("Whether to play the pre-lightning strike effect, this delays when lightning strikes.")]
+    public bool PlayPreLightningEffects = true;
+    [Space(2)]
+
+    [Header("Explosion settings.")]
+    [Tooltip("Range of the lethal killing explosion.")]
+    public float KillRange = 1f;
+    [Tooltip("Range of the non-lethal damage dealt to the player.")]
+    public float DamageRange = 5f;
+    [Tooltip("Damage dealt to the player when the lightning strikes.")]
+    public int NonLethalDamage = 20;
+    [Tooltip("Force from the explosion towards the player.")]
+    public float PhysicsForce = 5f;
+    [Tooltip("Whether to play the explosion effects.")]
+    public bool PlayExplosionEffects = true;
+    [Tooltip("Prefab to override the default explosion particle effect.")]
+    public GameObject? OverridePrefab = null;
+    [Tooltip("Whether lightning strikes through cars.")]
+    public bool HitsThroughCar = false;
+
     private System.Random random = new System.Random();
+    private StormyWeather stormy = null!;
+    private LightningBoltPrefabScript localLightningBoltPrefabScript = null!;
+    private AudioSource audioSource = null!;
     public void OnEnable() {
         random = new System.Random(StartOfRound.Instance.randomMapSeed + 85);
-        StartCoroutine(SpawnLightningBoltCoroutine());
-    }
-
-    private IEnumerator SpawnLightningBoltCoroutine() {
-        while (true) {
-            Vector3 positionToStrike = DetermineStrikePosition();
-            SpawnLightningBolt(positionToStrike);
-            yield return new WaitForSeconds(Mathf.Clamp((float)random.NextDouble() + StrikeInterval, 0, 9999f));
-        }
-    }
-
-    public void SpawnLightningBolt(Vector3 strikePosition)
-    {
-        Vector3 offset = new Vector3((float)(random.NextDouble()*64-32), 0f, (float)(random.NextDouble()*64-32));
-        Vector3 vector = strikePosition + Vector3.up * 160f + offset;
-
-        StormyWeather stormy = UnityEngine.Object.FindObjectOfType<StormyWeather>(true);
+        stormy = UnityEngine.Object.FindObjectOfType<StormyWeather>(true);
+        localLightningBoltPrefabScript = Object.Instantiate(stormy.targetedThunder);
+        localLightningBoltPrefabScript.enabled = true;
+        audioSource = Object.Instantiate(stormy.targetedStrikeAudio);
+        
         if (stormy == null)
         {
             Plugin.Log.LogWarning("StormyWeather not found");
             return;
         }
 
-        // Plugin.ExtendedLogging($"{vector} -> {strikePosition}");
-
-        LightningBoltPrefabScript localLightningBoltPrefabScript = Object.Instantiate(stormy.targetedThunder);
-        localLightningBoltPrefabScript.enabled = true;
-
         if (localLightningBoltPrefabScript == null)
         {
             Plugin.Log.LogWarning("localLightningBoltPrefabScript not found");
             return;
         }
+
+        StartCoroutine(SpawnLightningBoltCoroutine());
+    }
+
+    private IEnumerator SpawnLightningBoltCoroutine() {
+        while (true) {
+            Vector3 positionToStrike = DetermineStrikePosition();
+            StartCoroutine(SpawnLightningBolt(positionToStrike));
+            yield return new WaitForSeconds(Mathf.Clamp(StrikeInterval, 0, 9999f));
+        }
+    }
+
+    public IEnumerator SpawnLightningBolt(Vector3 strikePosition)
+    {
+        if (PlayPreLightningEffects)
+        {
+            audioSource.clip = stormy.staticElectricityAudio;
+            ParticleSystem particleSystem = stormy.staticElectricityParticle;
+            ShapeModule shape = particleSystem.shape;
+            shape.meshRenderer = null;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = 0.1f;
+            audioSource.Play();
+            yield return new WaitForSeconds(audioSource.clip.length);
+        }
+        Vector3 offset = new Vector3((float)(random.NextDouble()*64-32), 0f, (float)(random.NextDouble()*64-32));
+        Vector3 vector = strikePosition + Vector3.up * 160f + offset;
+
+        Plugin.Log.LogInfo($"{vector} -> {strikePosition}");
 
         localLightningBoltPrefabScript.GlowWidthMultiplier = GlowWidthMultiplier;
         localLightningBoltPrefabScript.DurationRange = new RangeOfFloats { Minimum = DurationMinimum, Maximum = DurationMaximum };
@@ -88,7 +123,6 @@ public class LightningScript : MonoBehaviour {
         localLightningBoltPrefabScript.AutomaticModeSeconds = 0.2f;
         localLightningBoltPrefabScript.Generations = NumberOfBolts;
         localLightningBoltPrefabScript.CreateLightningBoltsNow();
-        AudioSource audioSource = Object.Instantiate(stormy.targetedStrikeAudio);;
         audioSource.transform.position = strikePosition + Vector3.up * 0.5f;
         audioSource.enabled = true;
 
@@ -99,13 +133,14 @@ public class LightningScript : MonoBehaviour {
         }
         if (LightningStrikeSound != null && LightningStrikeSound.Count > 0) audioSource.clip = LightningStrikeSound[Random.Range(0, LightningStrikeSound.Count)];
         stormy.PlayThunderEffects(strikePosition, audioSource);
+        Landmine.SpawnExplosion(strikePosition, PlayExplosionEffects, KillRange, DamageRange, NonLethalDamage, PhysicsForce, OverridePrefab, HitsThroughCar);
     }
 
     public Vector3 DetermineStrikePosition() {
         if (UseGameObjectPosition) {
-            return RoundManager.Instance.GetRandomNavMeshPositionInRadiusSpherical(this.transform.position, BoltRangeFromGameObject, default);
+            return RoundManager.Instance.GetRandomPositionInRadius(this.transform.position, 0, BoltRangeFromGameObject, random);
         } else if (BoltPositions != null && BoltPositions.Count > 0) {
-            return RoundManager.Instance.GetRandomNavMeshPositionInRadiusSpherical(BoltPositions[random.Next(BoltPositions.Count)].transform.position, BoltRangeFromList, default);
+            return RoundManager.Instance.GetRandomPositionInRadius(BoltPositions[random.Next(BoltPositions.Count)].transform.position, 0, BoltRangeFromGameObject, random);
         }
         return this.transform.position;
     }

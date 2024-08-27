@@ -26,7 +26,8 @@ public class Plugin : BaseUnityPlugin
       We assign it here
     */
     Log = Logger;
-    ShovelPatch.Init();
+    ShovelPatches.Init();
+    EnemyAIPatches.Init();
     // Log our awake here so we can see it in LogOutput.txt file
     Log.LogInfo($"Plugin {LCMPluginInfo.PLUGIN_NAME} is loaded!");
   }

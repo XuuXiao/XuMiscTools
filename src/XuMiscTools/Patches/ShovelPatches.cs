@@ -1,8 +1,5 @@
-using System.Collections.Generic;
-using GameNetcodeStuff;
-
 namespace XuMiscTools.Patches;
-static class ShovelPatch {
+static class ShovelPatches {
 	public static System.Random? random;
 	
 	public static void Init() {
